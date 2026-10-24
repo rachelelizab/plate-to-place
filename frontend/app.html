@@ -1,0 +1,330 @@
+<header class="top">
+  <div class="top-inner">
+    <div class="brand">
+      <h1>Plate<b>2</b>Place</h1>
+      <span>Spoilage-aware food rescue · Bengaluru</span>
+    </div>
+    <nav class="tabs" role="tablist" aria-label="Sections">
+      <button class="tab" role="tab" data-view="map" aria-selected="true" id="tab-map">Live map</button>
+      <button class="tab" role="tab" data-view="compare" aria-selected="false" id="tab-compare">Compare</button>
+      <button class="tab" role="tab" data-view="desk" aria-selected="false" id="tab-desk">Dispatch desk</button>
+      <button class="tab" role="tab" data-view="lab" aria-selected="false" id="tab-lab">Structures lab</button>
+      <button class="tab" role="tab" data-view="method" aria-selected="false" id="tab-method">Method</button>
+    </nav>
+    <span class="engine-badge" id="engine-badge"><i></i>engine: browser</span>
+  </div>
+</header>
+
+<main>
+  <!-- =============== LIVE MAP =============== -->
+  <section class="view" id="view-map" role="tabpanel" aria-labelledby="tab-map">
+    <div class="intro">
+      <span class="eyebrow">Simulated evening · 18:00 to 02:30</span>
+      <h2>Surplus cooked food has a few safe hours. Who should collect what, and when?</h2>
+      <p>Each circle is a donation: restaurants, wedding halls, canteens. The colour shows how much safe time is left. Volunteers (blue) move on a road network whose travel times change with Bengaluru's evening traffic.</p>
+    </div>
+    <div class="workspace">
+      <div class="stack">
+        <div class="panel toolbar">
+          <div class="seg" id="strat-seg" role="group" aria-label="Dispatch strategy">
+            <button data-s="fcfs" aria-pressed="false">First come</button>
+            <button data-s="nearest" aria-pressed="false">Nearest</button>
+            <button data-s="plate2place" aria-pressed="true">Plate2Place</button>
+          </div>
+          <button class="btn" id="play-btn" aria-label="Play or pause">Pause</button>
+          <select id="speed" aria-label="Playback speed" class="btn">
+            <option value="3">3 min/s</option><option value="8" selected>8 min/s</option><option value="20">20 min/s</option><option value="45">45 min/s</option>
+          </select>
+          <input type="range" class="scrub" id="scrub" min="1080" max="1635" step="0.5" value="1300" aria-label="Time of night">
+          <span class="clock" id="clock">21:40</span>
+        </div>
+        <div class="map-wrap" id="map-wrap">
+          <canvas id="map-canvas" aria-label="Map of Bengaluru showing donations, shelters and volunteers"></canvas>
+          <div class="tip" id="map-tip" hidden></div>
+        </div>
+        <div class="legend">
+          <span><i class="sw" style="background:var(--fresh)"></i>Fresh (&gt;50% safe time left)</span>
+          <span><i class="sw" style="background:var(--warn)"></i>Spoiling soon</span>
+          <span><i class="sw" style="background:var(--spoil)"></i>Last 20% / spoiled</span>
+          <span><i class="sw" style="background:var(--route)"></i>Volunteer (filled = carrying food)</span>
+          <span><i class="sw sq" style="background:var(--ink)"></i>Shelter</span>
+          <span><i class="sw" style="background:rgba(var(--zone),.35)"></i>Congested zone</span>
+        </div>
+        <div class="kpis">
+          <div class="kpi good"><b id="k-saved">0</b><span>meals delivered safe</span></div>
+          <div class="kpi bad"><b id="k-spoiled">0</b><span>portions spoiled</span></div>
+          <div class="kpi"><b id="k-open">0</b><span>open posts</span></div>
+          <div class="kpi"><b id="k-moving">0</b><span>volunteers on a trip</span></div>
+        </div>
+        <div class="panel">
+          <div class="fields">
+            <label class="field">City seed <input type="number" id="p-seed" min="1" max="9999" value="7" style="width:6em"></label>
+            <label class="field">Donations: <span class="num" id="p-don-v">160</span><input type="range" id="p-don" min="80" max="300" step="10" value="160"></label>
+            <label class="field">Volunteers: <span class="num" id="p-vol-v">20</span><input type="range" id="p-vol" min="8" max="40" step="1" value="20"></label>
+            <button class="btn primary" id="run-btn">Run evening</button>
+            <span class="note" id="run-note"></span>
+          </div>
+        </div>
+      </div>
+
+      <aside class="stack">
+        <div class="panel">
+          <div class="panel-head">
+            <h3>Kinetic heap · most valuable posts</h3>
+            <span class="chip" id="kh-chip">drives decisions</span>
+          </div>
+          <p class="small muted" style="margin-bottom:8px">Value = portions × share of safe time left. Every value falls continuously; the heap only does work when two lines cross.</p>
+          <div class="klist" id="klist"></div>
+          <div class="swaps" id="swaps"></div>
+        </div>
+        <div class="panel">
+          <div class="panel-head">
+            <h3>AVL tree · expiry index</h3>
+            <small class="num" id="avl-meta"></small>
+          </div>
+          <div class="tree-box" id="avl-box"></div>
+          <p class="small muted">Keyed on (expiry time, id). Answers “what spoils in the next 90 minutes?” in O(log n + k) and sweeps expired posts.</p>
+        </div>
+        <div class="panel">
+          <div class="panel-head"><h3>Dispatch log</h3><small id="log-count"></small></div>
+          <div class="log" id="log"></div>
+        </div>
+      </aside>
+    </div>
+  </section>
+
+  <!-- =============== COMPARE =============== -->
+  <section class="view" id="view-compare" role="tabpanel" aria-labelledby="tab-compare" hidden>
+    <div class="intro">
+      <span class="eyebrow">Same city, same donations, same volunteers</span>
+      <h2>Three ways to dispatch the same evening</h2>
+      <p id="cmp-sub">First come, first served is how WhatsApp groups work today. Nearest first is the obvious upgrade. Plate2Place adds decaying priorities, an expiry index and exact time-dependent routes.</p>
+    </div>
+    <div class="cards3" id="cmp-cards"></div>
+    <div class="two">
+      <div class="panel chart">
+        <div class="panel-head"><h3>Meals delivered over the night</h3><small>cumulative</small></div>
+        <div id="cmp-line"></div>
+      </div>
+      <div class="panel">
+        <div class="panel-head"><h3>Where the food went</h3><small>portions</small></div>
+        <div class="splitbar" id="cmp-split"></div>
+        <div class="legend" style="margin-top:12px">
+          <span><i class="sw sq" style="background:var(--fresh)"></i>Delivered</span>
+          <span><i class="sw sq" style="background:var(--spoil)"></i>Spoiled before pickup</span>
+          <span><i class="sw sq" style="background:var(--warn)"></i>Spoiled in transit</span>
+          <span><i class="sw sq" style="background:var(--muted)"></i>Shelter full</span>
+        </div>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="panel-head">
+        <h3>Robustness: five more evenings</h3>
+        <button class="btn" id="seeds-btn">Run seeds 1–5</button>
+      </div>
+      <div class="scroll-x" id="seeds-table"><p class="note">Runs the three strategies on five different generated evenings (same settings as the current run) and reports meals saved.</p></div>
+    </div>
+  </section>
+
+  <!-- =============== DESK =============== -->
+  <section class="view" id="view-desk" role="tabpanel" aria-labelledby="tab-desk" hidden>
+    <div class="intro">
+      <span class="eyebrow">Coordinator mode</span>
+      <h2>Post donations as they arrive. Ask who should go where.</h2>
+      <p>This is how a food-rescue group would use the system on a real night. Click the map to place a donation or a volunteer. The six posts loaded at start are examples.</p>
+    </div>
+    <div class="workspace">
+      <div class="stack">
+        <div class="panel toolbar">
+          <div class="seg" id="desk-mode" role="group" aria-label="Map click places">
+            <button data-m="donation" aria-pressed="true">Place donation</button>
+            <button data-m="volunteer" aria-pressed="false">Place volunteer</button>
+          </div>
+          <span class="clock" id="desk-clock">20:00</span>
+          <button class="btn" data-adv="10">+10 min</button>
+          <button class="btn" data-adv="30">+30 min</button>
+        </div>
+        <div class="map-wrap pick" id="desk-wrap">
+          <canvas id="desk-map" aria-label="Dispatch desk map; click to place"></canvas>
+          <div class="tip" id="desk-tip" hidden></div>
+        </div>
+        <div class="toast" id="desk-toast" role="status"></div>
+      </div>
+      <aside class="stack">
+        <div class="panel">
+          <div class="panel-head"><h3>New donation</h3><small id="d-where">click the map to place it</small></div>
+          <div class="fields">
+            <label class="field">Donor
+              <select id="d-type">
+                <option value="Restaurant|35|180">Restaurant</option>
+                <option value="Wedding hall|180|180">Wedding hall</option>
+                <option value="Corporate canteen|90|150">Corporate canteen</option>
+                <option value="Hostel mess|50|180">Hostel mess</option>
+                <option value="Hotel buffet|70|120">Hotel buffet</option>
+              </select>
+            </label>
+            <label class="field">Portions <input type="number" id="d-portions" min="1" max="1000" value="35" style="width:6em"></label>
+            <label class="field">Safe for (min) <input type="number" id="d-life" min="10" max="720" value="180" style="width:6em"></label>
+          </div>
+        </div>
+        <div class="panel">
+          <div class="panel-head"><h3>Volunteer</h3><small id="v-where">click “Place volunteer”, then the map</small></div>
+          <div class="fields">
+            <label class="field">Vehicle
+              <select id="v-cap"><option value="45">Scooter · 45 portions</option><option value="180">Car · 180 portions</option></select>
+            </label>
+            <button class="btn primary" id="rec-btn" disabled>Find best pickup</button>
+          </div>
+          <div class="options" id="rec-list" style="margin-top:10px"></div>
+        </div>
+        <div class="panel">
+          <div class="panel-head"><h3>Open posts, most valuable first</h3><small>kinetic heap · top-k</small></div>
+          <div class="dlist" id="desk-ranked"></div>
+        </div>
+        <div class="panel">
+          <div class="panel-head"><h3>Spoils within 60 min</h3><small>AVL range query</small></div>
+          <div class="dlist" id="desk-urgent"></div>
+        </div>
+      </aside>
+    </div>
+  </section>
+
+  <!-- =============== LAB =============== -->
+  <section class="view" id="view-lab" role="tabpanel" aria-labelledby="tab-lab" hidden>
+    <div class="intro">
+      <span class="eyebrow">The structures, one operation at a time</span>
+      <h2>Why each data structure is there</h2>
+    </div>
+    <div class="panel">
+      <div class="panel-head"><h3>BST vs AVL on expiry times</h3><small>donations arrive in time order, the worst case for a plain BST</small></div>
+      <div class="fields">
+        <label class="field">Key <input type="number" id="t-key" value="42" style="width:6em"></label>
+        <button class="btn" id="t-ins">Insert</button>
+        <button class="btn" id="t-del">Delete</button>
+        <button class="btn primary" id="t-sorted">Insert 8 keys in time order</button>
+        <button class="btn" id="t-rand">Insert 8 random keys</button>
+        <button class="btn" id="t-reset">Reset</button>
+      </div>
+      <div class="two" style="margin-top:12px">
+        <div><div class="panel-head"><h3>Plain BST</h3><small class="num" id="bst-meta"></small></div><div class="tree-box" id="bst-box"></div></div>
+        <div><div class="panel-head"><h3>AVL tree</h3><small class="num" id="avl2-meta"></small></div><div class="tree-box" id="avl2-box"></div><p class="small muted" id="rot-log"></p></div>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="panel-head"><h3>Kinetic heap in slow motion</h3><small>six donations, two hours</small></div>
+      <div class="fields">
+        <label class="field" style="flex:1 1 260px">Minutes after posting: <span class="num" id="kt-v">0</span>
+          <input type="range" id="kt" min="0" max="120" step="0.5" value="38"></label>
+        <button class="btn" id="kt-new">New example</button>
+      </div>
+      <div class="two" style="margin-top:12px">
+        <div class="chart"><div id="kchart"></div><p class="small muted">Each line is one donation's value. Dots mark the moments a certificate failed and the heap swapped a parent and child. Lines that cross without a dot belong to items that are not parent and child at that moment, so their crossing costs no work.</p></div>
+        <div>
+          <div class="tree-box" id="kheap-box"></div>
+          <div class="stat-line" id="kstats"></div>
+          <div class="panel-head" style="margin-top:10px"><h3>Next certificates to fail</h3></div>
+          <div class="certs" id="kcerts"></div>
+        </div>
+      </div>
+    </div>
+    <div class="two">
+      <div class="panel">
+        <div class="panel-head"><h3>Benchmark · BST vs AVL</h3><small>n inserts + n lookups, nearly sorted keys</small></div>
+        <div class="scroll-x" id="bench-trees"><p class="note">Measuring…</p></div>
+      </div>
+      <div class="panel">
+        <div class="panel-head"><h3>Benchmark · kinetic vs re-sorting</h3><small>6-hour evening, 1-minute clock</small></div>
+        <div class="scroll-x" id="bench-kin"><p class="note">Measuring…</p></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- =============== METHOD =============== -->
+  <section class="view" id="view-method" role="tabpanel" aria-labelledby="tab-method" hidden>
+    <div class="prose">
+      <span class="eyebrow">Problem, design and analysis</span>
+      <h2 style="font-size:1.7rem;font-stretch:85%">Plate2Place: kinetic priorities with time-dependent routing</h2>
+      <h3>The problem</h3>
+      <p>Every night, Bengaluru's restaurants, wedding halls, hostels and canteens discard cooked food while shelters nearby go short. Rescue groups coordinate on WhatsApp: a volunteer sees a post and goes, with no idea whether the food will still be safe on arrival, or whether someone else is already on the way. Cooked food is safe for only a few hours, and the same trip can take 15 minutes at 22:30 and 50 at 19:00.</p>
+      <h3>Why the usual approaches fall short</h3>
+      <ul>
+        <li><b>First come, first served</b> ignores distance and freshness, so volunteers cross the city for food that spoils before they arrive.</li>
+        <li><b>Nearest first</b> ignores value and deadline, so a 250-portion wedding surplus can spoil while volunteers collect 15-portion posts.</li>
+        <li>Both use static priorities. The real priority of a post changes every minute.</li>
+      </ul>
+      <h3>The approach</h3>
+      <div class="pipeline">
+        <span>Donation posted</span><em>→</em><span>HashMap registry</span><em>→</em><span>Kinetic heap (value decays)</span><em>+</em><span>AVL (expiry index)</span><em>→</em><span>Candidates</span><em>→</em><span>Time-dependent Dijkstra, both legs</span><em>→</em><span>Feasible? best meals per minute</span><em>→</em><span>HashMap claim lock</span>
+      </div>
+      <p>A donation of <i>P</i> portions with safe life <i>L</i> expiring at <i>E</i> has value <span class="mono">f(t) = P·(E − t)/L</span>, which is linear in time. The kinetic heap stores one certificate per parent–child edge (“parent ≥ child”) and the exact time it will fail. Only failures cost work.</p>
+
+      <h3>Algorithm 1 · Kinetic heap advance</h3>
+<pre class="code"><span class="k">procedure</span> ADVANCE(t)
+  <span class="k">while</span> events.min().time ≤ t <span class="k">do</span>        <span class="c">// events = indexed min-heap of certificates</span>
+    (c, τ) ← events.pop();  now ← τ
+    p ← ⌊(c − 1)/2⌋
+    <span class="k">if</span> f<sub>H[c]</sub>(now) &gt; f<sub>H[p]</sub>(now) <span class="k">then</span>
+      swap H[c], H[p]
+      RECOMPUTE certificates of p, c, and their children   <span class="c">// O(1) certs, O(log n) each</span>
+  now ← t
+
+<span class="k">function</span> FAILTIME(p, c)                     <span class="c">// when does f_c overtake f_p ?</span>
+  <span class="k">if</span> b<sub>p</sub> ≤ b<sub>c</sub> <span class="k">then return</span> ∞
+  <span class="k">return</span> (a<sub>p</sub> − a<sub>c</sub>) / (b<sub>p</sub> − b<sub>c</sub>)</pre>
+
+      <h3>Algorithm 2 · Choosing a pickup for an idle volunteer</h3>
+<pre class="code"><span class="k">function</span> CHOOSE(v, t)
+  KH.ADVANCE(t);  AVL.SWEEP(t)                          <span class="c">// drop expired posts</span>
+  C ← KH.TOPK(16) ∪ AVL.RANGE(t, t + 90)                <span class="c">// valuable ∪ urgent</span>
+  C ← { d ∈ C : not CLAIMED[d] }                         <span class="c">// HashMap lock</span>
+  arrive ← TD-DIJKSTRA(source = v.node, depart = t, targets = C)
+  best ← none
+  <span class="k">for each</span> d <span class="k">in</span> C <span class="k">do</span>
+    load ← min(v.capacity, d.remaining)
+    eta  ← TD-DIJKSTRA-TO-NEAREST-SHELTER(d.node, arrive[d] + pickup, load) + drop
+    <span class="k">if</span> eta &gt; d.expiry − margin <span class="k">then continue</span>       <span class="c">// would spoil: never send anyone</span>
+    score ← load / (eta − t) × (1 + 0.6·max(0, 1 − slack/90))
+    best ← argmax(best, score)
+  CLAIMED[best] ← v;  <span class="k">return</span> best</pre>
+
+      <h3>Algorithm 3 · Time-dependent Dijkstra</h3>
+<pre class="code"><span class="k">function</span> TD-DIJKSTRA(sources, targets)
+  arrive[·] ← ∞;  <span class="k">for</span> (s, t<sub>0</sub>) <span class="k">in</span> sources: arrive[s] ← t<sub>0</sub>; PQ.push(t<sub>0</sub>, s)
+  <span class="k">while</span> PQ not empty <span class="k">do</span>
+    (t, u) ← PQ.pop();  <span class="k">if</span> done[u] <span class="k">then continue</span>;  done[u] ← true
+    <span class="k">if</span> u ∈ targets and all targets settled <span class="k">then break</span>
+    <span class="k">for each</span> edge (u, w) <span class="k">do</span>
+      t' ← t + base(u,w) × congestion(class, zone, t)    <span class="c">// cost depends on departure time</span>
+      <span class="k">if</span> t' &lt; arrive[w] <span class="k">then</span> arrive[w] ← t'; PQ.push(t', w)
+<span class="c">// Exact because congestion changes slowly enough that leaving later never arrives earlier (FIFO).</span></pre>
+
+      <h3>Complexity</h3>
+      <div class="scroll-x">
+        <table class="data">
+          <thead><tr><th>Structure</th><th>Role</th><th>Operation</th><th>Cost</th></tr></thead>
+          <tbody>
+            <tr><td>Kinetic heap</td><td style="text-align:left;font-family:var(--font-body)">ranking by decaying value</td><td>advance / insert / remove / top</td><td>O(e log n) / O(log n) / O(log n) / O(1)</td></tr>
+            <tr><td>Indexed min-heap</td><td style="text-align:left;font-family:var(--font-body)">certificate queue, Dijkstra frontier, event loop</td><td>push / pop / upsert / remove</td><td>O(log n)</td></tr>
+            <tr><td>AVL tree</td><td style="text-align:left;font-family:var(--font-body)">expiry index</td><td>insert / delete / range / sweep</td><td>O(log n) / O(log n) / O(log n + k) / O(k log n)</td></tr>
+            <tr><td>BST (baseline)</td><td style="text-align:left;font-family:var(--font-body)">shows why balancing matters</td><td>insert on sorted keys</td><td>O(n), so O(n²) for n posts</td></tr>
+            <tr><td>Graph + TD-Dijkstra</td><td style="text-align:left;font-family:var(--font-body)">exact ETAs at this hour</td><td>one query</td><td>O((V + E) log V)</td></tr>
+            <tr><td>Hash map</td><td style="text-align:left;font-family:var(--font-body)">registry, claim locks, heap positions</td><td>get / set / delete</td><td>O(1) average</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="small muted">One dispatch decision costs O(log n + k) to gather candidates plus O(K·(V + E) log V) for the routes, where K ≤ 16 + (posts expiring within 90 minutes). A naive ranker that re-sorts every post every minute costs O(n log n) per minute whether or not anything changed; the kinetic heap only pays for the e crossings that actually happen.</p>
+
+      <h3>Run it yourself</h3>
+<pre class="code">npm test        <span class="c"># 16 tests: every structure against a reference implementation</span>
+npm run bench   <span class="c"># BST vs AVL, kinetic vs naive, strategy comparison</span>
+npm run build && npm start   <span class="c"># http://localhost:3000 — frontend + REST API</span>
+
+GET  /api/run?seed=7&donations=160&volunteers=20      <span class="c"># all three strategies + traces</span>
+GET  /api/compare?seeds=1,2,3,4,5
+POST /api/live/donations   {"donor","lat","lng","portions","lifeMinutes"}
+POST /api/live/recommend   {"lat","lng","cap"}
+POST /api/live/claim       {"id","volunteer"}</pre>
+      <p class="small muted">The city is a synthetic road grid laid over Bengaluru's real extent and neighbourhoods, with evening congestion profiles; donors and shelters are generated labels, not real organisations.</p>
+    </div>
+  </section>
+</main>

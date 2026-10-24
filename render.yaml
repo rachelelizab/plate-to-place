@@ -1,0 +1,9 @@
+# One-click deploy on Render (free web service): New → Blueprint → pick this repo.
+services:
+  - type: web
+    name: plate2place
+    runtime: node
+    plan: free
+    buildCommand: npm run build && npm test
+    startCommand: npm start
+    healthCheckPath: /api/health
