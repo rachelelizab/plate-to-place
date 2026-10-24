@@ -66,7 +66,7 @@
   }
 
   // ---------------------------------------------------------------- state
-  const state = { view: 'map', run: null, strat: 'plate2place', T: 21 * 60 + 40, playing: !reduceMotion, speed: 8, prep: null, hl: null };
+  const state = { view: 'map', run: null, strat: 'plate2place', T: 21 * 60 + 40, playing: !reduceMotion, speed: 5, prep: null, hl: null };
 
   // ---------------------------------------------------------------- map renderer
   const maps = [];
@@ -125,7 +125,7 @@
           g.stroke();
         }
       }
-      g.font = `600 ${this.W < 500 ? 9 : 10.5}px ${getComputedStyle(document.body).getPropertyValue('--font-display') || 'sans-serif'}`;
+      g.font = `600 ${this.W < 500 ? 9 : 10.5}px "Source Sans 3", system-ui, sans-serif`;
       g.textAlign = 'center';
       for (const a of E.AREAS) {
         g.fillStyle = C.muted; g.globalAlpha = 0.85;
@@ -305,7 +305,67 @@
       const slice = L.slice(Math.max(0, idx - 39), idx + 1).reverse();
       $('#log').innerHTML = slice.map((e) => `<div class="${e.kind}"><time>${fmt(e.t)}</time><i></i><span>${esc(e.text)}</span></div>`).join('');
       $('#log-count').textContent = `${idx + 1} events`;
+      renderNow(L, idx, force || !state.playing);
     }
+  }
+
+  // ---------------------------------------------------------------- live explanation of the latest event
+  const PIPE = { post: ['registry', 'rank', 'expiry'], assign: ['rank', 'expiry', 'route', 'lock'], pickup: ['rank', 'expiry', 'route'],
+    deliver: ['registry'], spoil: ['expiry'], wasted: ['route'], shift: ['registry'] };
+  function explain(e) {
+    const d = e.id ? state.prep.byId.get(e.id) : null;
+    switch (e.kind) {
+      case 'post': return { title: 'New donation posted', steps: [
+        ['Hash map', `${e.id} is stored under its id, so any later lookup is O(1).`],
+        ['Kinetic heap', `Inserted with value ${d.portions} portions × 100% safe time. From now on its value falls every minute — O(log n).`],
+        ['AVL tree', `Indexed by its expiry time ${fmt(d.expiry)}, so it appears in "spoils soon" queries in time — O(log n).`]] };
+      case 'assign':
+        if (state.strat === 'fcfs') return { title: 'Volunteer dispatched (first come, first served)', steps: [
+          ['Queue', 'Took the oldest open post, wherever it is in the city.'],
+          ['No check', 'Nobody checks whether the food will still be safe on arrival. This is how WhatsApp groups work today.']] };
+        if (state.strat === 'nearest') return { title: 'Volunteer dispatched (nearest first)', steps: [
+          ['Dijkstra', 'Took the closest post by travel time at this hour.'],
+          ['No check', 'Ignores how many portions it has and how soon it spoils.']] };
+        return { title: 'Volunteer dispatched', steps: [
+          ['Candidates', 'Top 16 by value from the kinetic heap, plus everything the AVL tree says spoils within 90 minutes.'],
+          ['Dijkstra', `Time-dependent routes for both legs at ${fmt(e.t)}: volunteer → donor, then donor → nearest shelter with space.`],
+          ['Feasibility', `Trips that would reach a shelter after the food expires are thrown out. Arrives at the donor ${fmt(e.eta)}; food safe until ${fmt(d.expiry)}.`],
+          ['Hash map', `Claim lock set on ${e.id}, so no other volunteer is sent there.`]] };
+      case 'pickup': return { title: 'Food collected', steps: [
+        ['Heap + AVL', `${e.id} is removed from the kinetic heap and the AVL tree — O(log n) each.`],
+        ['Partial load', /vehicle full/.test(e.text) ? 'The vehicle was full, so the rest is put back in the heap with a smaller value.' : 'Everything fitted in the vehicle.'],
+        ['Dijkstra', 'Routes the load to the nearest shelter that still has space.']] };
+      case 'deliver': return { title: 'Meals delivered', steps: [
+        ['Saved', 'Reached the shelter before expiry, so these portions count as meals saved.'],
+        ['Hash map', 'Shelter capacity updated; a full shelter drops out of future routing.']] };
+      case 'spoil': return { title: 'Food spoiled', steps: [
+        ['AVL sweep', 'The clock passed its expiry, so it was popped from the AVL tree (smallest key first) and counted as lost.'],
+        ['Why', state.strat === 'plate2place' ? 'No volunteer could reach it and a shelter before it expired.' : 'Volunteers were busy elsewhere, or arrived too late.']] };
+      case 'wasted': return { title: 'Wasted trip', steps: [
+        ['Too late', 'The volunteer arrived after the food had expired. Plate2Place prevents this with its feasibility check.']] };
+      case 'shift': return { title: 'Volunteer comes online', steps: [
+        ['Hash map', 'Added to the set of idle volunteers and dispatched immediately if there is work.']] };
+      default: return { title: e.kind, steps: [] };
+    }
+  }
+  let nowShownAt = 0, nowShownIdx = -2;
+  function renderNow(L, idx, force) {
+    const pipe = $$('#pipeline li');
+    // while playing, hold each explanation on screen long enough to read
+    if (!force && state.playing && idx !== nowShownIdx && performance.now() - nowShownAt < 2200) return;
+    if (idx === nowShownIdx && !force) return;
+    nowShownAt = performance.now(); nowShownIdx = idx;
+    if (idx < 0) { $('#now-body').innerHTML = '<p class="note">The evening starts at 18:00. Press play.</p>'; pipe.forEach((li) => li.classList.remove('active')); return; }
+    const e = L[idx], x = explain(e);
+    $('#now-time').textContent = fmt(e.t);
+    const prev = L.slice(Math.max(0, idx - 3), idx).reverse();
+    $('#now-body').innerHTML = `
+      <div class="now-title ${e.kind}"><i></i>${esc(x.title)}</div>
+      <p class="now-text">${esc(e.text)}</p>
+      <ul class="now-steps">${x.steps.map(([tag, t]) => `<li><b>${esc(tag)}</b><span>${esc(t)}</span></li>`).join('')}</ul>
+      ${prev.length ? `<div class="now-prev">${prev.map((p) => `<div><time>${fmt(p.t)}</time>${esc(p.text)}</div>`).join('')}</div>` : ''}`;
+    const on = new Set(PIPE[e.kind] || []);
+    pipe.forEach((li) => li.classList.toggle('active', on.has(li.dataset.k)));
   }
   $('#klist').addEventListener('click', (e) => {
     const r = e.target.closest('.krow'); if (!r) return;
@@ -349,6 +409,14 @@
     setPlaying(!state.playing);
   });
   $('#speed').addEventListener('change', (e) => { state.speed = +e.target.value; });
+  $('#step-btn').addEventListener('click', () => {
+    const L = state.prep.tr.log;
+    const next = L.find((e) => e.t > state.T + 0.01 && e.kind !== 'shift');
+    if (!next) return;
+    setPlaying(false);
+    state.T = next.t + 0.01;
+    renderPanels(true); drawMap();
+  });
   $('#scrub').addEventListener('input', (e) => { state.T = +e.target.value; renderPanels(); drawMap(); });
   $('#strat-seg').addEventListener('click', (e) => {
     const b = e.target.closest('button'); if (!b) return;
@@ -419,7 +487,7 @@
     const t0 = state.run.scenario.start, t1 = state.run.scenario.stop;
     const ymax = Math.max(...S.map((s) => R[s].metrics.saved)) * 1.08;
     const sx = (t) => L + ((t - t0) / (t1 - t0)) * (W - L - Rr), sy = (v) => Tp + (1 - v / ymax) * (H - Tp - B);
-    const col = { fcfs: C.muted, nearest: C.route, plate2place: C.accent };
+    const col = { fcfs: C.muted, nearest: C.warn, plate2place: C.accent };
     let svg = '';
     const step = ymax > 8000 ? 2000 : ymax > 4000 ? 1000 : 500;
     for (let v = 0; v <= ymax; v += step) svg += `<line class="grid" x1="${L}" x2="${W - Rr}" y1="${sy(v)}" y2="${sy(v)}"/><text class="axis" x="${L - 8}" y="${sy(v) + 4}" text-anchor="end">${v.toLocaleString('en-IN')}</text>`;

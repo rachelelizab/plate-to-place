@@ -28,7 +28,7 @@ const head = `<title>Plate2Place</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <meta name="description" content="Spoilage-aware surplus-food rescue dispatch for Bengaluru: kinetic heap, AVL tree, time-dependent Dijkstra.">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..800&family=Atkinson+Hyperlegible:wght@400;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,500..700&family=Source+Sans+3:wght@400;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
 <style>
 ${css}</style>`;
 const body = `${html}\n<script>\n${engine}\n</script>\n<script>\n${app}\n</script>\n`;

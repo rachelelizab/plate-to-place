@@ -21,8 +21,17 @@
     <div class="intro">
       <span class="eyebrow">Simulated evening · 18:00 to 02:30</span>
       <h2>Surplus cooked food has a few safe hours. Who should collect what, and when?</h2>
-      <p>Each circle is a donation: restaurants, wedding halls, canteens. The colour shows how much safe time is left. Volunteers (blue) move on a road network whose travel times change with Bengaluru's evening traffic.</p>
+      <p>Each circle is a donation from a restaurant, wedding hall or canteen. Its colour shows how much safe time is left. Volunteers move on a road network whose travel times change with Bengaluru's evening traffic. Press play and follow the panel on the right: it explains each decision as it happens.</p>
     </div>
+
+    <ol class="pipeline-steps" id="pipeline" aria-label="What happens to every donation">
+      <li data-k="registry"><span class="ps-n">1</span><div><b>Register</b><span>Hash map stores the post by id</span><em>O(1)</em></div></li>
+      <li data-k="rank"><span class="ps-n">2</span><div><b>Rank</b><span>Kinetic heap orders by value that decays</span><em>O(log n)</em></div></li>
+      <li data-k="expiry"><span class="ps-n">3</span><div><b>Index expiry</b><span>AVL tree finds what spoils soon</span><em>O(log n + k)</em></div></li>
+      <li data-k="route"><span class="ps-n">4</span><div><b>Route</b><span>Time-dependent Dijkstra, both legs</span><em>O((V+E) log V)</em></div></li>
+      <li data-k="lock"><span class="ps-n">5</span><div><b>Claim</b><span>Hash map lock: one volunteer per post</span><em>O(1)</em></div></li>
+    </ol>
+
     <div class="workspace">
       <div class="stack">
         <div class="panel toolbar">
@@ -32,8 +41,9 @@
             <button data-s="plate2place" aria-pressed="true">Plate2Place</button>
           </div>
           <button class="btn" id="play-btn" aria-label="Play or pause">Pause</button>
+          <button class="btn" id="step-btn" title="Jump to the next decision and pause">Next event ›</button>
           <select id="speed" aria-label="Playback speed" class="btn">
-            <option value="3">3 min/s</option><option value="8" selected>8 min/s</option><option value="20">20 min/s</option><option value="45">45 min/s</option>
+            <option value="2">2 min/s</option><option value="5" selected>5 min/s</option><option value="10">10 min/s</option><option value="30">30 min/s</option>
           </select>
           <input type="range" class="scrub" id="scrub" min="1080" max="1635" step="0.5" value="1300" aria-label="Time of night">
           <span class="clock" id="clock">21:40</span>
@@ -46,7 +56,7 @@
           <span><i class="sw" style="background:var(--fresh)"></i>Fresh (&gt;50% safe time left)</span>
           <span><i class="sw" style="background:var(--warn)"></i>Spoiling soon</span>
           <span><i class="sw" style="background:var(--spoil)"></i>Last 20% / spoiled</span>
-          <span><i class="sw" style="background:var(--route)"></i>Volunteer (filled = carrying food)</span>
+          <span><i class="sw" style="background:var(--route)"></i>Volunteer (green fill = carrying food)</span>
           <span><i class="sw sq" style="background:var(--ink)"></i>Shelter</span>
           <span><i class="sw" style="background:rgba(var(--zone),.35)"></i>Congested zone</span>
         </div>
@@ -68,6 +78,13 @@
       </div>
 
       <aside class="stack">
+        <div class="panel now" aria-live="polite">
+          <div class="panel-head">
+            <h3>What just happened</h3>
+            <small class="num" id="now-time"></small>
+          </div>
+          <div id="now-body"><p class="note">Press play to start the evening.</p></div>
+        </div>
         <div class="panel">
           <div class="panel-head">
             <h3>Kinetic heap · most valuable posts</h3>
@@ -98,7 +115,7 @@
     <div class="intro">
       <span class="eyebrow">Same city, same donations, same volunteers</span>
       <h2>Three ways to dispatch the same evening</h2>
-      <p id="cmp-sub">First come, first served is how WhatsApp groups work today. Nearest first is the obvious upgrade. Plate2Place adds decaying priorities, an expiry index and exact time-dependent routes.</p>
+      <p id="cmp-sub">First come, first served is how WhatsApp groups work today. Nearest first is the obvious upgrade. Plate2Place adds decaying priorities, an expiry index and exact time-dependent routes. Read each card top to bottom: meals delivered first, then where the rest was lost.</p>
     </div>
     <div class="cards3" id="cmp-cards"></div>
     <div class="two">
